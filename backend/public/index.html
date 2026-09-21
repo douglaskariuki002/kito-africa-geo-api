@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Kito — Africa Geo API console</title>
+<script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
+<link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet" />
+<style>
+  :root{
+    --ink:#182420;
+    --ink-soft:#4b5a54;
+    --paper:#f3efe6;
+    --panel:#fffdf8;
+    --line:#d9d1bf;
+    --clay:#b5651d;
+    --clay-soft:#e7c9a8;
+    --teal:#12615c;
+    --teal-soft:#cfe6e2;
+    --radius:3px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;font-family:"Iowan Old Style","Georgia",serif;background:var(--paper);color:var(--ink);}
+  #app{display:grid;grid-template-columns:340px 1fr;height:100vh;}
+  @media (max-width:820px){ #app{grid-template-columns:1fr;grid-template-rows:auto 1fr;} }
+
+  aside{
+    border-right:1px solid var(--line);
+    background:var(--panel);
+    overflow-y:auto;
+    padding:22px 20px 40px;
+  }
+  header.brand{margin-bottom:18px;}
+  header.brand .mark{
+    display:inline-block;width:26px;height:26px;border-radius:50%;
+    background:conic-gradient(from 210deg, var(--clay), var(--teal), var(--clay));
+    vertical-align:middle;margin-right:9px;
+  }
+  header.brand h1{
+    font-family:"Iowan Old Style","Georgia",serif;
+    font-weight:600;font-size:21px;letter-spacing:0.2px;margin:0;display:inline;
+  }
+  header.brand p{font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;color:var(--ink-soft);margin:8px 0 0;line-height:1.5;}
+
+  .section{margin-top:26px;}
+  .section h2{
+    font-family:-apple-system,BlinkMacSystemFont,sans-serif;
+    font-size:11px;font-weight:600;letter-spacing:0.06em;color:var(--ink-soft);
+    margin:0 0 10px;text-transform:none;
+  }
+  .section h2::before{content:"— ";color:var(--clay);}
+
+  select, textarea, input, button{
+    font-family:-apple-system,BlinkMacSystemFont,sans-serif;
+    font-size:13px;
+  }
+  select, textarea, input{
+    width:100%;border:1px solid var(--line);border-radius:var(--radius);
+    background:#fff;color:var(--ink);padding:8px 9px;
+  }
+  textarea{min-height:150px;resize:vertical;line-height:1.5;}
+  label{display:block;font-size:12px;color:var(--ink-soft);margin:10px 0 4px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;}
+  label:first-child{margin-top:0;}
+
+  .row{display:flex;gap:8px;}
+  .row > *{flex:1;}
+
+  button{
+    cursor:pointer;border:1px solid var(--ink);background:var(--ink);color:var(--paper);
+    border-radius:var(--radius);padding:9px 12px;font-weight:600;letter-spacing:0.01em;
+    transition:transform .08s ease, background .15s ease;
+  }
+  button:hover{background:#0e1613;}
+  button:active{transform:translateY(1px);}
+  button.ghost{background:transparent;color:var(--ink);border-color:var(--line);font-weight:500;}
+  button.ghost:hover{border-color:var(--ink);background:transparent;}
+  button.danger{background:transparent;color:#8a3324;border-color:#e0b7a8;font-weight:500;}
+  button.danger:hover{background:#fbeee8;}
+
+  .hint{font-size:11.5px;color:var(--ink-soft);margin-top:6px;line-height:1.5;font-family:-apple-system,BlinkMacSystemFont,sans-serif;}
+  .status{font-size:12px;margin-top:10px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;min-height:16px;}
+  .status.err{color:#a13a24;}
+  .status.ok{color:var(--teal);}
+
+  .legend{display:flex;align-items:center;gap:8px;margin-top:10px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:11px;color:var(--ink-soft);}
+  .legend .ramp{height:8px;flex:1;border-radius:2px;border:1px solid var(--line);}
+
+  .points-list{list-style:none;margin:10px 0 0;padding:0;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;max-height:150px;overflow-y:auto;border:1px solid var(--line);border-radius:var(--radius);}
+  .points-list li{padding:7px 9px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:8px;align-items:center;}
+  .points-list li:last-child{border-bottom:none;}
+  .points-list .coords{color:var(--ink-soft);font-variant-numeric:tabular-nums;}
+  .points-list button{padding:2px 7px;font-size:11px;background:transparent;border:1px solid var(--line);color:var(--ink-soft);font-weight:400;}
+  .points-list .empty{color:var(--ink-soft);padding:10px 9px;font-style:italic;}
+
+  main{position:relative;}
+  #map{position:absolute;inset:0;}
+
+  .draw-toggle{
+    position:absolute;top:16px;left:16px;z-index:5;
+    background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:8px 12px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;
+    display:flex;align-items:center;gap:8px;box-shadow:0 1px 3px rgba(0,0,0,.08);
+  }
+  .draw-toggle input{width:auto;}
+  .draw-toggle.active{border-color:var(--clay);color:var(--clay);}
+
+  .credit{
+    position:absolute;bottom:6px;right:8px;z-index:5;font-family:-apple-system,BlinkMacSystemFont,sans-serif;
+    font-size:10px;color:#5a5a5a;background:rgba(255,255,255,.7);padding:2px 6px;border-radius:2px;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <aside>
+    <header class="brand">
+      <span class="mark"></span><h1>Kito</h1>
+      <p>Africa-focused geo console. Post a dataset for a choropleth, drag the map with native zoom/pan, and drop reference points anywhere on the continent.</p>
+    </header>
+
+    <div class="section">
+      <h2>Choropleth data</h2>
+      <label for="dataset">Sample dataset</label>
+      <select id="dataset">
+        <option value="population">Population density (per km²)</option>
+        <option value="internet">Internet penetration (% of population)</option>
+        <option value="custom">Custom JSON…</option>
+      </select>
+      <label for="palette">Palette</label>
+      <select id="palette">
+        <option value="sand">Sand (clay ramp)</option>
+        <option value="teal">Teal</option>
+        <option value="blues">Blues</option>
+        <option value="oranges">Oranges</option>
+        <option value="viridis">Viridis</option>
+      </select>
+      <label for="values">Values (country name → number)</label>
+      <textarea id="values" spellcheck="false"></textarea>
+      <div class="hint">This is the exact JSON body sent to <code>POST /api/choropleth</code>. Edit it directly, or pick a sample above.</div>
+      <div class="row" style="margin-top:12px;">
+        <button id="apply-btn">Render choropleth</button>
+        <button id="clear-choropleth-btn" class="ghost">Clear</button>
+      </div>
+      <div id="choropleth-status" class="status"></div>
+      <div class="legend" id="legend" style="display:none;">
+        <span id="legend-min">–</span>
+        <div class="ramp" id="legend-ramp"></div>
+        <span id="legend-max">–</span>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Points</h2>
+      <div class="draw-toggle-inline" style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;color:var(--ink-soft);margin-bottom:8px;">
+        Turn on <strong>Drop points</strong> (top-left of the map) then click anywhere to place a marker.
+      </div>
+      <ul class="points-list" id="points-list"><li class="empty">No points yet</li></ul>
+      <div class="row" style="margin-top:10px;">
+        <button id="export-points-btn" class="ghost">Export GeoJSON</button>
+        <button id="clear-points-btn" class="danger">Clear all</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>API</h2>
+      <div class="hint">
+        Base map tiles and choropleth geometry are served by the backend at <code id="api-base"></code>. Swap the <code>GEOAPIFY_API_KEY</code> in <code>.env</code> to point this at your own Geoapify account.
+      </div>
+    </div>
+  </aside>
+
+  <main>
+    <div id="map"></div>
+    <label class="draw-toggle" id="draw-toggle">
+      <input type="checkbox" id="draw-checkbox" />
+      Drop points
+    </label>
+    <div class="credit">Basemap © Geoapify · Data © OpenStreetMap contributors</div>
+  </main>
+</div>
+
+<script>
+const API_BASE = window.location.origin.includes("null") ? "http://localhost:4000" : "http://localhost:4000";
+document.getElementById("api-base").textContent = API_BASE;
+
+const SAMPLES = {
+  population: {
+    "Nigeria": 226, "Egypt": 103, "Ethiopia": 115, "Kenya": 92, "Democratic Republic of the Congo": 40,
+    "South Africa": 49, "Algeria": 18, "Morocco": 84, "Ghana": 138, "Tanzania": 67,
+    "Uganda": 253, "Senegal": 89, "Tunisia": 76, "Rwanda": 525, "Nambia": 3
+  },
+  internet: {
+    "Nigeria": 55, "Egypt": 72, "Kenya": 42, "South Africa": 68, "Morocco": 84,
+    "Ghana": 68, "Tunisia": 79, "Algeria": 71, "Senegal": 46, "Ethiopia": 24,
+    "Democratic Republic of the Congo": 23, "Tanzania": 33, "Rwanda": 32, "Uganda": 28
+  }
+};
+
+const valuesBox = document.getElementById("values");
+const datasetSelect = document.getElementById("dataset");
+const paletteSelect = document.getElementById("palette");
+const statusEl = document.getElementById("choropleth-status");
+const legend = document.getElementById("legend");
+const legendMin = document.getElementById("legend-min");
+const legendMax = document.getElementById("legend-max");
+const legendRamp = document.getElementById("legend-ramp");
+
+function loadSample(name) {
+  if (name === "custom") return;
+  valuesBox.value = JSON.stringify(SAMPLES[name], null, 2);
+}
+loadSample("population");
+datasetSelect.addEventListener("change", (e) => loadSample(e.target.value));
+
+const PALETTE_CSS = {
+  sand: "linear-gradient(90deg, #f6ead9, #b5651d)",
+  teal: "linear-gradient(90deg, #e6f7f6, #0f5e5a)",
+  blues: "linear-gradient(90deg, #f7fbff, #08306b)",
+  oranges: "linear-gradient(90deg, #fff5eb, #7f2704)",
+  viridis: "linear-gradient(90deg, #440154, #fde725)"
+};
+
+let map;
+let mapConfig = { center: [20, 2], zoom: 3 };
+
+async function boot() {
+  try {
+    const res = await fetch(`${API_BASE}/api/map-config`);
+    if (res.ok) mapConfig = await res.json();
+  } catch (e) {
+    console.warn("Backend not reachable yet — using default view.", e);
+  }
+
+  map = new maplibregl.Map({
+    container: "map",
+    center: mapConfig.center || [20, 2],
+    zoom: mapConfig.zoom || 3,
+    style: mapConfig.vectorStyleUrl || {
+      version: 8,
+      sources: {},
+      layers: [{ id: "bg", type: "background", paint: { "background-color": "#e9e4d8" } }]
+    }
+  });
+
+  // Native zoom + pan controls (scroll-wheel zoom, drag pan, and double-click
+  // zoom already ship with MapLibre; this just adds the on-screen buttons).
+  map.addControl(new maplibregl.NavigationControl({ showCompass: true }), "top-right");
+  map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-left");
+
+  map.on("load", () => {
+    map.addSource("choropleth", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+    map.addLayer({
+      id: "choropleth-fill",
+      type: "fill",
+      source: "choropleth",
+      paint: { "fill-color": ["get", "fill"], "fill-opacity": 0.82 }
+    });
+    map.addLayer({
+      id: "choropleth-outline",
+      type: "line",
+      source: "choropleth",
+      paint: { "line-color": "#fffdf8", "line-width": 0.6 }
+    });
+
+    map.addSource("points", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+    map.addLayer({
+      id: "points-layer",
+      type: "circle",
+      source: "points",
+      paint: {
+        "circle-radius": 6,
+        "circle-color": "#b5651d",
+        "circle-stroke-width": 2,
+        "circle-stroke-color": "#fffdf8"
+      }
+    });
+
+    // Hover tooltip for choropleth regions
+    const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false });
+    map.on("mousemove", "choropleth-fill", (e) => {
+      const f = e.features[0];
+      map.getCanvas().style.cursor = "pointer";
+      const v = f.properties.value === null || f.properties.value === "" ? "no data" : f.properties.value;
+      popup.setLngLat(e.lngLat).setHTML(`<strong>${f.properties.name}</strong><br/>${v}`).addTo(map);
+    });
+    map.on("mouseleave", "choropleth-fill", () => {
+      map.getCanvas().style.cursor = "";
+      popup.remove();
+    });
+
+    refreshPoints();
+  });
+
+  map.on("click", (e) => {
+    if (!drawEnabled) return;
+    addPoint(e.lngLat.lat, e.lngLat.lng);
+  });
+}
+
+// ---- Choropleth ----
+document.getElementById("apply-btn").addEventListener("click", async () => {
+  let values;
+  try {
+    values = JSON.parse(valuesBox.value);
+  } catch (e) {
+    setStatus("That's not valid JSON — check for a stray comma or quote.", true);
+    return;
+  }
+
+  setStatus("Rendering…", false);
+  try {
+    const res = await fetch(`${API_BASE}/api/choropleth`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ values, palette: paletteSelect.value, format: "geojson" })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Request failed");
+
+    map.getSource("choropleth").setData(data.geojson);
+    setStatus(
+      data.unmatchedKeys && data.unmatchedKeys.length
+        ? `Rendered. Unmatched names: ${data.unmatchedKeys.join(", ")}`
+        : "Rendered.",
+      false, true
+    );
+
+    legend.style.display = "flex";
+    legendMin.textContent = data.domain[0];
+    legendMax.textContent = data.domain[1];
+    legendRamp.style.background = PALETTE_CSS[paletteSelect.value] || PALETTE_CSS.sand;
+  } catch (err) {
+    setStatus(err.message || "Could not reach the API.", true);
+  }
+});
+
+document.getElementById("clear-choropleth-btn").addEventListener("click", () => {
+  map.getSource("choropleth").setData({ type: "FeatureCollection", features: [] });
+  legend.style.display = "none";
+  setStatus("", false);
+});
+
+function setStatus(msg, isErr) {
+  statusEl.textContent = msg;
+  statusEl.className = "status" + (isErr ? " err" : msg ? " ok" : "");
+}
+
+// ---- Points ----
+let drawEnabled = false;
+const drawToggle = document.getElementById("draw-toggle");
+document.getElementById("draw-checkbox").addEventListener("change", (e) => {
+  drawEnabled = e.target.checked;
+  drawToggle.classList.toggle("active", drawEnabled);
+});
+
+async function addPoint(lat, lng) {
+  try {
+    await fetch(`${API_BASE}/api/points`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lat, lng })
+    });
+    refreshPoints();
+  } catch (e) {
+    console.warn(e);
+  }
+}
+
+async function refreshPoints() {
+  try {
+    const res = await fetch(`${API_BASE}/api/points`);
+    const geojson = await res.json();
+    if (map.getSource("points")) map.getSource("points").setData(geojson);
+    renderPointsList(geojson.features);
+  } catch (e) {
+    console.warn(e);
+  }
+}
+
+function renderPointsList(features) {
+  const list = document.getElementById("points-list");
+  if (!features.length) {
+    list.innerHTML = `<li class="empty">No points yet</li>`;
+    return;
+  }
+  list.innerHTML = features
+    .map((f) => {
+      const [lng, lat] = f.geometry.coordinates;
+      return `<li><span class="coords">${lat.toFixed(3)}, ${lng.toFixed(3)}</span><button data-id="${f.properties.id}">Remove</button></li>`;
+    })
+    .join("");
+  list.querySelectorAll("button[data-id]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      await fetch(`${API_BASE}/api/points/${btn.dataset.id}`, { method: "DELETE" });
+      refreshPoints();
+    });
+  });
+}
+
+document.getElementById("clear-points-btn").addEventListener("click", async () => {
+  await fetch(`${API_BASE}/api/points`, { method: "DELETE" });
+  refreshPoints();
+});
+
+document.getElementById("export-points-btn").addEventListener("click", async () => {
+  const res = await fetch(`${API_BASE}/api/points`);
+  const geojson = await res.json();
+  const blob = new Blob([JSON.stringify(geojson, null, 2)], { type: "application/geo+json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "points.geojson";
+  a.click();
+});
+
+boot();
+</script>
+</body>
+</html>
