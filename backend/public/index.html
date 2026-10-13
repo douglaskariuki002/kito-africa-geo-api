@@ -152,8 +152,18 @@
     <div class="section">
       <h2>Points</h2>
       <div class="draw-toggle-inline" style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;color:var(--ink-soft);margin-bottom:8px;">
-        Turn on <strong>Drop points</strong> (top-left of the map) then click anywhere to place a marker.
+        Turn on <strong>Drop points</strong> (top-left of the map) then click anywhere to place a marker, or add a coordinate pair below.
       </div>
+
+      <label for="point-lat">Latitude</label>
+      <input id="point-lat" type="number" min="-90" max="90" step="any" placeholder="e.g. 6.5244" />
+      <label for="point-lng">Longitude</label>
+      <input id="point-lng" type="number" min="-180" max="180" step="any" placeholder="e.g. 3.3792" />
+      <div class="row" style="margin-top:10px;">
+        <button id="add-point-btn" type="button">Add point</button>
+      </div>
+      <div id="points-status" class="status"></div>
+
       <ul class="points-list" id="points-list"><li class="empty">No points yet</li></ul>
       <div class="row" style="margin-top:10px;">
         <button id="export-points-btn" class="ghost">Export GeoJSON</button>
@@ -348,22 +358,58 @@ function setStatus(msg, isErr) {
 // ---- Points ----
 let drawEnabled = false;
 const drawToggle = document.getElementById("draw-toggle");
+const pointStatusEl = document.getElementById("points-status");
+
+function setPointStatus(msg, isErr) {
+  pointStatusEl.textContent = msg;
+  pointStatusEl.className = "status" + (isErr ? " err" : msg ? " ok" : "");
+}
+
 document.getElementById("draw-checkbox").addEventListener("change", (e) => {
   drawEnabled = e.target.checked;
   drawToggle.classList.toggle("active", drawEnabled);
+  if (drawEnabled) setPointStatus("Click anywhere on the map to drop a point.", false);
+  else setPointStatus("", false);
+});
+
+document.getElementById("add-point-btn").addEventListener("click", async () => {
+  const lat = Number(document.getElementById("point-lat").value);
+  const lng = Number(document.getElementById("point-lng").value);
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    setPointStatus("Enter valid latitude and longitude values.", true);
+    return;
+  }
+  if (lat < -90 || lat > 90) {
+    setPointStatus("Latitude must be between -90 and 90.", true);
+    return;
+  }
+  if (lng < -180 || lng > 180) {
+    setPointStatus("Longitude must be between -180 and 180.", true);
+    return;
+  }
+
+  try {
+    await addPoint(lat, lng);
+    setPointStatus(`Added point at ${lat.toFixed(4)}, ${lng.toFixed(4)}.`, false);
+    document.getElementById("point-lat").value = "";
+    document.getElementById("point-lng").value = "";
+    if (map) map.flyTo({ center: [lng, lat], zoom: Math.max(map.getZoom(), 5) });
+  } catch (e) {
+    setPointStatus(e.message || "Could not add the point.", true);
+  }
 });
 
 async function addPoint(lat, lng) {
-  try {
-    await fetch(`${API_BASE}/api/points`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ lat, lng })
-    });
-    refreshPoints();
-  } catch (e) {
-    console.warn(e);
-  }
+  const res = await fetch(`${API_BASE}/api/points`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ lat, lng })
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || "Request failed");
+  await refreshPoints();
 }
 
 async function refreshPoints() {
